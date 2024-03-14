@@ -9,7 +9,7 @@ Pod::Spec.new do |s|
   s.license          = 'MIT'
   s.homepage         = 'https://github.com/npomfret/react-native-cloud-fs'
   s.authors          = 'npomfret'
-  s.platforms        = { :ios => "9.0", :tvos => "9.2" }
+  s.platforms        = { :ios => "9.0", :tvos => "9.2", :visionos => "1.0" }
   s.source           = { :git => 'https://github.com/npomfret/react-native-cloud-fs.git' }
   s.source_files     = 'ios/**/*.{h,m}'
   s.requires_arc     = true
