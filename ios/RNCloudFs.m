@@ -8,7 +8,9 @@
 #endif
 #import "RCTEventDispatcher.h"
 #import "RCTUtils.h"
-#import <AssetsLibrary/AssetsLibrary.h>
+#if !TARGET_OS_VISION
+  #import <AssetsLibrary/AssetsLibrary.h>
+#endif
 #import "RCTLog.h"
 
 @implementation RNCloudFs
@@ -23,7 +25,7 @@
 RCT_EXPORT_MODULE()
 
 //see https://developer.apple.com/library/content/documentation/General/Conceptual/iCloudDesignGuide/Chapters/iCloudFundametals.html
-  
+
 RCT_EXPORT_METHOD(isAvailable:(RCTPromiseResolveBlock)resolve
                 rejecter:(RCTPromiseRejectBlock)reject) {
 
@@ -180,7 +182,7 @@ rejecter:(RCTPromiseRejectBlock)rejecter) {
 
     NSPredicate *pred = [NSPredicate predicateWithFormat: @"%K == %@", NSMetadataItemFSNameKey, filename];
     [_query setPredicate:pred];
-    
+
 
     [[NSNotificationCenter defaultCenter] addObserverForName:
      NSMetadataQueryDidFinishGatheringNotification
@@ -220,7 +222,7 @@ RCT_EXPORT_METHOD(deleteFromCloud:(NSDictionary *)item
 resolver:(RCTPromiseResolveBlock)resolver
 rejecter:(RCTPromiseRejectBlock)rejecter) {
    NSError *error;
-   
+
     NSFileManager* fileManager = [NSFileManager defaultManager];
     [fileManager removeItemAtPath:item[@"path"] error:&error];
     if(error) {
@@ -250,29 +252,31 @@ RCT_EXPORT_METHOD(copyToCloud:(NSDictionary *)options
     }
 
     if([sourceUri hasPrefix:@"assets-library"]){
-        ALAssetsLibrary *library = [[ALAssetsLibrary alloc] init];
+        #if !TARGET_OS_VISION
+            ALAssetsLibrary *library = [[ALAssetsLibrary alloc] init];
 
-        [library assetForURL:[NSURL URLWithString:sourceUri] resultBlock:^(ALAsset *asset) {
+            [library assetForURL:[NSURL URLWithString:sourceUri] resultBlock:^(ALAsset *asset) {
 
-            ALAssetRepresentation *rep = [asset defaultRepresentation];
+                ALAssetRepresentation *rep = [asset defaultRepresentation];
 
-            Byte *buffer = (Byte*)malloc(rep.size);
-            NSUInteger buffered = [rep getBytes:buffer fromOffset:0.0 length:rep.size error:nil];
-            NSData *data = [NSData dataWithBytesNoCopy:buffer length:buffered freeWhenDone:YES];
+                Byte *buffer = (Byte*)malloc(rep.size);
+                NSUInteger buffered = [rep getBytes:buffer fromOffset:0.0 length:rep.size error:nil];
+                NSData *data = [NSData dataWithBytesNoCopy:buffer length:buffered freeWhenDone:YES];
 
-            if (data) {
-                NSString *filename = [sourceUri lastPathComponent];
-                NSString *tempFile = [NSTemporaryDirectory() stringByAppendingPathComponent:filename];
-                [data writeToFile:tempFile atomically:YES];
-                [self moveToICloudDirectory:documentsFolder :tempFile :destinationPath :resolve :reject];
-            } else {
+                if (data) {
+                    NSString *filename = [sourceUri lastPathComponent];
+                    NSString *tempFile = [NSTemporaryDirectory() stringByAppendingPathComponent:filename];
+                    [data writeToFile:tempFile atomically:YES];
+                    [self moveToICloudDirectory:documentsFolder :tempFile :destinationPath :resolve :reject];
+                } else {
+                    RCTLogTrace(@"source file does not exist %@", sourceUri);
+                    return reject(@"error", [NSString stringWithFormat:@"failed to copy asset '%@'", sourceUri], nil);
+                }
+            } failureBlock:^(NSError *error) {
                 RCTLogTrace(@"source file does not exist %@", sourceUri);
-                return reject(@"error", [NSString stringWithFormat:@"failed to copy asset '%@'", sourceUri], nil);
-            }
-        } failureBlock:^(NSError *error) {
-            RCTLogTrace(@"source file does not exist %@", sourceUri);
-            return reject(@"error", error.description, nil);
-        }];
+                return reject(@"error", error.description, nil);
+            }];
+        #endif
     } else if ([sourceUri hasPrefix:@"file:/"] || [sourceUri hasPrefix:@"/"]) {
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"^file:/+" options:NSRegularExpressionCaseInsensitive error:nil];
         NSString *modifiedSourceUri = [regex stringByReplacingMatchesInString:sourceUri options:0 range:NSMakeRange(0, [sourceUri length]) withTemplate:@"/"];
@@ -433,21 +437,21 @@ RCT_EXPORT_METHOD(copyToCloud:(NSDictionary *)options
 
 RCT_EXPORT_METHOD(syncCloud:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject) {
-    
+
     _query = [[NSMetadataQuery alloc] init];
     [_query setSearchScopes:@[NSMetadataQueryUbiquitousDocumentsScope, NSMetadataQueryUbiquitousDataScope]];
     [_query setPredicate:[NSPredicate predicateWithFormat: @"%K LIKE '*'", NSMetadataItemFSNameKey]];
 
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        
+
         BOOL startedQuery = [self->_query startQuery];
         if (!startedQuery)
         {
             reject(@"error", @"Failed to start query.\n", nil);
         }
     });
-    
+
     [[NSNotificationCenter defaultCenter] addObserverForName:
      NSMetadataQueryDidFinishGatheringNotification
     object:_query queue:[NSOperationQueue currentQueue]
@@ -461,7 +465,7 @@ RCT_EXPORT_METHOD(syncCloud:(RCTPromiseResolveBlock)resolve
         }
         return resolve(@YES);
     }];
-    
+
 }
 
 @end
